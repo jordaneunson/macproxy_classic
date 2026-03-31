@@ -1,3 +1,4 @@
+html5lib
 ## The following requirements were added by pip freeze:
 beautifulsoup4==4.14.3
 blinker==1.9.0

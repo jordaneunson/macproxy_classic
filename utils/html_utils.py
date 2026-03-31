@@ -1,5 +1,10 @@
 from bs4 import BeautifulSoup
 from bs4.formatter import HTMLFormatter
+from flask import current_app, url_for
+from utils.image_utils import fetch_and_cache_image
+from utils.debug_utils import debug_print
+import copy
+import hashlib
 import re
 import html
 
@@ -69,6 +74,12 @@ def transcode_html(
     attributes_to_strip=None,
     convert_characters=False,
     conversion_table=None,
+    resize_images=True,
+    max_image_width=512,
+    max_image_height=342,
+    convert_images=True,
+    convert_images_to=None,
+    dithering_algorithm="FLOYDSTEINBERG",
 ):
     """
     Uses BeautifulSoup to transcode payloads of the text/html content type
@@ -136,6 +147,73 @@ def transcode_html(
     for tag in soup.find_all(["style", "link"]):
         if tag.string:
             tag.string = tag.string.replace("https://", "http://")
+
+    # Handle inline SVGs - first pass
+    # If any SVG has a <use href="#id"> or <use xlink:href="#id">, find the
+    # matching <symbol id="id"> elsewhere on the page and inline its contents.
+    # If the symbol defines a viewBox, copy it to the parent <svg>.
+    for use_tag in soup.find_all("use"):
+        attrs = use_tag.attrs
+        if "href" in attrs:
+            ref_attr = "href"
+        elif "xlink:href" in attrs:
+            ref_attr = "xlink:href"
+        else:
+            continue
+        symbol_id = use_tag[ref_attr].lstrip("#")
+        symbol_tag = soup.find("symbol", {"id": symbol_id})
+        if not symbol_tag:
+            continue
+        if (
+            "viewBox" in symbol_tag.attrs
+            and use_tag.parent.name == "svg"
+            and "viewBox" not in use_tag.parent.attrs
+        ):
+            use_tag.parent["viewBox"] = symbol_tag["viewBox"]
+        symbol_tag_copy = copy.copy(symbol_tag)
+        use_tag.replace_with(symbol_tag_copy)
+        symbol_tag_copy.unwrap()
+
+    # Handle inline SVGs - second pass
+    # Convert each <svg> to a cached image (GIF or other configured format)
+    # and replace it with an <img> tag pointing to the proxy's cache endpoint.
+    if convert_images_to is None:
+        convert_images_to = "gif"
+    for tag in soup.find_all("svg"):
+        svg_attrs = tag.attrs
+
+        # Ensure height/width are set so the <img> replacement has correct dimensions
+        if "height" not in svg_attrs and "viewBox" in svg_attrs:
+            view_box = svg_attrs["viewBox"].split()
+            tag["height"] = view_box[3]
+        if "width" not in svg_attrs and "viewBox" in svg_attrs:
+            view_box = svg_attrs["viewBox"].split()
+            tag["width"] = view_box[2]
+
+        fake_url = hashlib.md5(str(tag).encode()).hexdigest()
+        fetch_and_cache_image(
+            fake_url,
+            str(tag).encode("utf-8"),
+            resize=resize_images,
+            max_width=max_image_width,
+            max_height=max_image_height,
+            convert=convert_images,
+            convert_to=convert_images_to,
+            dithering=dithering_algorithm,
+            hash_url=False,
+        )
+        extension = convert_images_to.lower() if convert_images else "gif"
+        relative_url = url_for("serve_cached_image", filename=f"{fake_url}.{extension}")
+        img_url = f"http://{current_app.config['MACPROXY_HOST_AND_PORT']}{relative_url}"
+        debug_print(f"Replaced inline SVG with cached image: {img_url}")
+
+        img_attrs = {"src": img_url}
+        if "height" in svg_attrs:
+            img_attrs["height"] = svg_attrs["height"]
+        if "width" in svg_attrs:
+            img_attrs["width"] = svg_attrs["width"]
+        img = soup.new_tag("img", **img_attrs)
+        tag.replace_with(img)
 
     # Use the custom formatter when converting the soup back to a string
     html = soup.decode(formatter=URLAwareHTMLFormatter())

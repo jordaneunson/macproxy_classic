@@ -100,13 +100,17 @@ def fetch_and_cache_image(
     convert=True,
     convert_to="gif",
     dithering="FLOYDSTEINBERG",
+    hash_url=True,
 ):
     try:
         debug_print(f"Processing image: {url}")
 
         # Generate filename with appropriate extension
         extension = convert_to.lower() if convert and convert_to else "gif"
-        file_name = hashlib.md5(url.encode()).hexdigest() + f".{extension}"
+        if hash_url:
+            file_name = hashlib.md5(url.encode()).hexdigest() + f".{extension}"
+        else:
+            file_name = url + f".{extension}"
         file_path = os.path.join(CACHE_DIR, file_name)
 
         if not os.path.exists(file_path):

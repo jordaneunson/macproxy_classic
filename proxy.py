@@ -376,6 +376,12 @@ def process_response(response, url):
             attributes_to_strip=config.ATTRIBUTES_TO_STRIP,
             convert_characters=config.CONVERT_CHARACTERS,
             conversion_table=config.CONVERSION_TABLE,
+            resize_images=config.RESIZE_IMAGES,
+            max_image_width=config.MAX_IMAGE_WIDTH,
+            max_image_height=config.MAX_IMAGE_HEIGHT,
+            convert_images=config.CONVERT_IMAGES,
+            convert_images_to=config.CONVERT_IMAGES_TO_FILETYPE,
+            dithering_algorithm=config.DITHERING_ALGORITHM,
         )
     else:
         debug_print(
@@ -482,4 +488,7 @@ if __name__ == "__main__":
     logging.getLogger("werkzeug").setLevel(
         logging.ERROR if not utils.debug_utils.DEBUG_MODE else logging.DEBUG
     )
+    # Store host and port in app config so html_utils can build absolute URLs
+    # to the proxy's own cache endpoint (used when replacing inline SVGs).
+    app.config["MACPROXY_HOST_AND_PORT"] = f"localhost:{arguments.port}"
     app.run(host="0.0.0.0", port=arguments.port, debug=utils.debug_utils.DEBUG_MODE)
