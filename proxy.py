@@ -488,7 +488,5 @@ if __name__ == "__main__":
     logging.getLogger("werkzeug").setLevel(
         logging.ERROR if not utils.debug_utils.DEBUG_MODE else logging.DEBUG
     )
-    # Store host and port in app config so html_utils can build absolute URLs
-    # to the proxy's own cache endpoint (used when replacing inline SVGs).
-    app.config["MACPROXY_HOST_AND_PORT"] = f"localhost:{arguments.port}"
+
     app.run(host="0.0.0.0", port=arguments.port, debug=utils.debug_utils.DEBUG_MODE)

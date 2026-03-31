@@ -1,6 +1,6 @@
 from bs4 import BeautifulSoup
 from bs4.formatter import HTMLFormatter
-from flask import current_app, url_for
+from flask import url_for
 from utils.image_utils import fetch_and_cache_image
 from utils.debug_utils import debug_print
 import copy
@@ -204,7 +204,8 @@ def transcode_html(
         )
         extension = convert_images_to.lower() if convert_images else "gif"
         relative_url = url_for("serve_cached_image", filename=f"{fake_url}.{extension}")
-        img_url = f"http://{current_app.config['MACPROXY_HOST_AND_PORT']}{relative_url}"
+        from flask import request as flask_request
+        img_url = f"http://{flask_request.host}{relative_url}"
         debug_print(f"Replaced inline SVG with cached image: {img_url}")
 
         img_attrs = {"src": img_url}
