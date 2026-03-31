@@ -403,6 +403,21 @@ def handle_default_request():
 
     try:
         resp = send_request(url, headers)
+
+        # Pass redirects back to the client so the browser updates its URL
+        # (important for relative link resolution).
+        # Exception: if rewriting https->http produces the same URL we just
+        # requested, the browser would loop forever. In that case, follow the
+        # full chain server-side.
+        if resp.status_code in (301, 302, 303, 307, 308) and "Location" in resp.headers:
+            location = resp.headers["Location"].replace("https://", "http://")
+            debug_print(f"Redirect {resp.status_code} -> {location}")
+            if location == url:
+                debug_print("Detected redirect loop, following server-side")
+                resp = send_request(location, headers, allow_redirects=True)
+            else:
+                return Response("", status=resp.status_code, headers={"Location": location})
+
         content = resp.content
         status_code = resp.status_code
         headers = dict(resp.headers)
@@ -438,14 +453,14 @@ def prepare_headers():
     return headers
 
 
-def send_request(url, headers):
+def send_request(url, headers, allow_redirects=False):
     debug_print(f"Sending request to: {url}")
     if request.method == "POST":
         return session.post(
             url, data=request.form, headers=headers, allow_redirects=True
         )
     else:
-        return session.get(url, params=request.args, headers=headers)
+        return session.get(url, params=request.args, headers=headers, allow_redirects=allow_redirects)
 
 
 @app.after_request
